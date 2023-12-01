@@ -290,6 +290,9 @@ Specify `displayName`/`key` for `Configurable`
 `com.intellij.remote.RemoteProcess.setWindowSize(int, int)` abstract method added
 : Should implement this method.
 
+`com.intellij.openapi.util.ActionCallback.doWhenRejected(Consumer)` method parameter type changed from `com.intellij.util.Consumer` to `java.util.function.Consumer`
+: `com.intellij.util.Consumer` is an obsolete and deprecated API, so ``java.util.function.Consumer` should be used
+
 ### Database Plugin 2023.2
 
 `com.intellij.database.dataSource.DataSourceStorageCore` class removed
