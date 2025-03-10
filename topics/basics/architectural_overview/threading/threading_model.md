@@ -127,6 +127,8 @@ The described lock characteristics conclude the following:
 - multiple threads can read data at the same time
 - once a thread acquires the write lock, no other threads can read or write data
 
+Note that acquiring write locks is prioritized over read locks.
+
 Acquiring and releasing locks explicitly in code would be verbose and error-prone and must never be done by plugins.
 The IntelliJ Platform enables write intent lock implicitly on EDT (see [](#locks-and-edt) for details) and provides an [API for accessing data under read or write locks](#accessing-data).
 
@@ -266,6 +268,10 @@ In all other cases, it is required to wrap read operation in a read action with 
 The read objects aren't guaranteed to survive between several consecutive read actions.
 Whenever starting a read action, check if the PSI/VFS/project/module is still valid.
 Example:
+
+<tabs group="languages">
+<tab title="Kotlin" group-key="kotlin">
+
 ```kotlin
 val virtualFile = runReadAction { // read action 1
   // read a virtual file
@@ -277,6 +283,25 @@ val psiFile = runReadAction { // read action 2
   } else null
 }
 ```
+
+</tab>
+<tab title="Java" group-key="java">
+
+```java
+VirtualFile virtualFile = ReadAction.compute(() -> { // read action 1
+  // read a virtual file
+});
+// do other time-consuming work...
+PsiFile psiFile = ReadAction.compute(() -> { // read action 2
+  if (virtualFile.isValid()) { // check if the virtual file is valid
+    return PsiManager.getInstance(project).findFile(virtualFile);
+  }
+  return null;
+});
+```
+
+</tab>
+</tabs>
 
 Between executing first and second read actions, another thread could invalidate the virtual file:
 

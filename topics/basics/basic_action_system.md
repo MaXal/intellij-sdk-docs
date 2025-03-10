@@ -2,6 +2,10 @@
 
 # Actions
 
+<web-summary>
+Adding custom actions to menus and toolbars. Implement and register actions, and handle user interactions efficiently.
+</web-summary>
+
 <link-summary>Adding custom actions to IntelliJ Platform-based IDEs menus and toolbar.</link-summary>
 
 <tldr>
@@ -35,8 +39,12 @@ The IntelliJ Platform calls methods of actions when a user interacts with a menu
 >
 {style="warning" title="No fields allowed"}
 
-> For actions available during [dumb mode](indexing_and_psi_stubs.md#dumb-mode), extend [`DumbAwareAction`](%gh-ic%/platform/ide-core/src/com/intellij/openapi/project/DumbAwareAction.java)
-> (do not override `AnAction.isDumbAware()` instead).
+> For actions available during [dumb mode](indexing_and_psi_stubs.md#dumb-mode), extend from
+> [`DumbAwareAction`](%gh-ic%/platform/ide-core/src/com/intellij/openapi/project/DumbAwareAction.java) instead of `AnAction`.
+>
+> Do not override `AnAction.isDumbAware()` instead.
+>
+{title="Actions available during indexing"}
 
 ### Principal Implementation Overrides
 
@@ -136,6 +144,12 @@ An example of enabling a menu action based on whether a project is open is demon
 
 When the user selects an enabled action, be it from a menu or toolbar, the action's `AnAction.actionPerformed()` method is called.
 This method contains the code executed to perform the action, and it is here that the real work gets done.
+
+> Reusable logic must *not* be exposed in the `AnAction` implementation via `static` methods (Java) or `companion object` (Kotlin).
+>
+> Instead, introduce dedicated methods in utility classes or [](plugin_services.md).
+>
+{title="Reusable Logic" style="warning"}
 
 By using the `AnActionEvent` methods and `CommonDataKeys`, objects such as the `Project`, `Editor`, `PsiFile`, and other information is available.
 For example, the `actionPerformed()` method can modify, remove, or add PSI elements to a file open in the editor.
@@ -378,6 +392,7 @@ Two steps are required to register an action from code:
 If a plugin needs to include a toolbar or popup menu built from a group of actions in its user interface, that is achieved through [`ActionPopupMenu`](%gh-ic%/platform/editor-ui-api/src/com/intellij/openapi/actionSystem/ActionPopupMenu.java) and [`ActionToolbar`](%gh-ic%/platform/editor-ui-api/src/com/intellij/openapi/actionSystem/ActionToolbar.java).
 These objects can be created through calls to the `ActionManager.createActionPopupMenu()` and `createActionToolbar()` methods.
 To get a Swing component from such an object, call the respective `getComponent()` method.
+See also [](popups.md#action-groups) for more advanced popups.
 
 If an action toolbar is attached to a specific component (for example, a panel in a tool window), call `ActionToolbar.setTargetComponent()` and pass the related component's instance as a parameter.
 Setting the target ensures that the toolbar buttons' state depends on the state of the related component, not on the current focus location within the IDE frame.
@@ -424,3 +439,49 @@ Executing actions can be achieved with [`ActionUtils.invokeAction()`](%gh-ic%/pl
 > If an action executed programmatically is under your control, extract its logic to a [service](plugin_services.md) or utility class and call it directly.
 >
 {style="warning"}
+
+## Action ID Code Insight{action-id-code-insight}
+<primary-label ref="2025.1"/>
+
+Code insight to defined Actions and Groups is provided by the _Plugin DevKit_ plugin.
+
+### Builtin Places
+
+- IntelliJ Platform API, for example [`ActionManager.getAction()`](%gh-ic%/platform/editor-ui-api/src/com/intellij/openapi/actionSystem/ActionManager.java)
+- Test Framework API, for example  [`CodeInsightTestFixture.performEditorAction()`](%gh-ic%/platform/testFramework/src/com/intellij/testFramework/fixtures/CodeInsightTestFixture.java)
+- String literal fields with the name `ACTION_ID`
+- Constants defined in [`IdeActions`](%gh-ic%/platform/ide-core/src/com/intellij/openapi/actionSystem/IdeActions.java)
+
+### Custom Places
+
+Additional places can be configured to provide _Action ID_ reference using the bundled _IntelliLang_ plugin.
+Common use cases include plugin-specific test utility code or configuration files.
+
+#### Code
+
+For string literal constants, parameters, and return values, use [`@Language`](%gh-java-annotations%/common/src/main/java/org/intellij/lang/annotations/Language.java)
+annotation with `devkit-action-id`.
+
+```Java
+public abstract class MyPluginTestCase
+    extends LightPlatformCodeInsightTestCase {
+
+  protected void doTestInvokingSomeAction(
+      @Language("devkit-action-id") @NonNls final String actionId
+      /* more parameters */) {
+  }
+
+}
+```
+
+#### Other Places
+
+To setup _Action ID_ references in other places (for example, XML files) perform the following steps:
+
+<procedure title="Injecting in other places">
+
+1. Navigate to the place in sources
+2. Invoke <control>Inject language or reference</control> intention
+3. Choose <control>Action ID Reference</control>
+
+</procedure>

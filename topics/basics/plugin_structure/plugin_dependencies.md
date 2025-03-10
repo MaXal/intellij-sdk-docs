@@ -1,8 +1,12 @@
-<!-- Copyright 2000-2024 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license. -->
+<!-- Copyright 2000-2025 JetBrains s.r.o. and contributors. Use of this source code is governed by the Apache 2.0 license. -->
 
 # Plugin Dependencies
 
 <!-- https://jb.gg/ij-plugin-dependencies -->
+
+<web-summary>
+Declaring dependencies on other IntelliJ Platform-based plugins. Locating plugin IDs required to set up dependencies.
+</web-summary>
 
 <link-summary>Declaring dependencies on other IntelliJ Platform-based plugins.</link-summary>
 
@@ -163,7 +167,7 @@ intellij {
 </tab>
 </tabs>
 
-> Transitive dependencies required for tests must currently be [specified explicitly](https://github.com/JetBrains/gradle-intellij-plugin/issues/38).
+> Transitive dependencies required for tests must currently be [specified explicitly](https://github.com/JetBrains/intellij-platform-gradle-plugin/issues/38).
 >
 {style="note"}
 

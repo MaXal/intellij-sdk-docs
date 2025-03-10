@@ -106,7 +106,9 @@ fun StringBuilder.appendContentHierarchy(content: DocumentationContent) {
 }
 
 fun StringBuilder.appendElementsHierarchy(elements: List<Element>, level: Int, parentPath: String) {
-  for (element in elements) {
+  val includedElements = elements
+    .filter { it.isIncluded() }
+  for (element in includedElements) {
     if (element.deprecatedSince != null) continue
     val elementSectionLink = element.getPath(parentPath)
     appendHierarchyLink(element, level, elementSectionLink)
@@ -116,8 +118,10 @@ fun StringBuilder.appendElementsHierarchy(elements: List<Element>, level: Int, p
 
 fun StringBuilder.appendHierarchyLink(element: Element, level: Int, elementSectionLink: String) {
   val elementName = if (element.isWildcard()) (element.descriptiveName ?: "*") else "`<${element.name}>`"
+  val internalLabelOrEmpty = if (element.getOwnOrParentInternalNote() != null) "  ![Internal][internal]" else ""
+  val deprecationLabelOrEmpty = if (element.deprecatedSince != null) "  ![Deprecated][deprecated]" else ""
   appendLine(
-    """${"  ".repeat(level)}- [$elementName](#$elementSectionLink)${if (element.deprecatedSince != null) "  ![Deprecated][deprecated]" else ""}"""
+    """${"  ".repeat(level)}- [$elementName](#$elementSectionLink)$internalLabelOrEmpty$deprecationLabelOrEmpty"""
   )
 }
 
@@ -132,8 +136,9 @@ fun StringBuilder.appendElements(
   isUnderDeprecatedParent: Boolean
 ) {
   // nested deprecated elements are "regular" to not render deprecation label multiple times
-  val regularElements = elements.filter { it.deprecatedSince == null }
-  val deprecatedElements = elements.filter { it.deprecatedSince != null }
+  val includedElements = elements.filter { it.isIncluded() }
+  val regularElements = includedElements.filter { it.deprecatedSince == null }
+  val deprecatedElements = includedElements.filter { it.deprecatedSince != null }
   for (element in regularElements) {
     appendElement(element, level, parentPath, false, false)
   }
@@ -155,6 +160,7 @@ fun StringBuilder.appendElement(
   if (renderedElementPaths.contains(elementSectionLink)) return
 
   appendSectionHeader(element, level, elementSectionLink, addDeprecationLabel)
+  appendInternalNote(element)
   appendDeprecationNote(element)
   appendReferences(element.references)
   element.description?.trim()?.let { appendLine("$it\n") }
@@ -194,9 +200,18 @@ fun StringBuilder.appendSectionHeader(
   }
 }
 
+fun StringBuilder.appendInternalNote(item: DocumentationItem) {
+  val internalNote = item.getOwnOrParentInternalNote() ?: return
+  appendWarningNote(internalNote)
+}
+
 fun StringBuilder.appendDeprecationNote(element: Element) {
-  val note = element.deprecationNote ?: return
-  val warning = note.lines().filter { it.isNotEmpty() }.joinToString(separator = "\n") { "> $it" }
+  val deprecationNote = element.deprecationNote ?: return
+  appendWarningNote(deprecationNote)
+}
+
+fun StringBuilder.appendWarningNote(text: String) {
+  val warning = text.lines().filter { it.isNotEmpty() }.joinToString(separator = "\n") { "> $it" }
   appendLine(warning)
   appendLine(">")
   appendLine("{style=\"warning\"}\n")
@@ -255,13 +270,15 @@ fun StringBuilder.appendDefaultValue(defaultValue: String?) {
 }
 
 fun StringBuilder.appendAttributes(attributeWrappers: List<AttributeWrapper>) {
-  val attributes = attributeWrappers.mapNotNull { it.attribute }
-  if (attributes.isNotEmpty()) {
+  val includedAttributes = attributeWrappers
+    .mapNotNull { it.attribute }
+    .filter { it.isIncluded() }
+  if (includedAttributes.isNotEmpty()) {
     appendLine("\n\n{type=\"narrow\"}")
     appendLine("Attributes")
     appendLine(":")
-    for ((index, attribute) in attributes.withIndex()) {
-      appendAttribute(attribute, index == attributes.lastIndex)
+    for ((index, attribute) in includedAttributes.withIndex()) {
+      appendAttribute(attribute, index == includedAttributes.lastIndex)
     }
   }
 }
@@ -272,6 +289,7 @@ fun StringBuilder.appendAttribute(
 ) {
   append("- `${attribute.name}`")
   appendAttributeRequirementAndAvailability(attribute)
+  appendAttributeInternalNote(attribute)
   appendAttributeDeprecationInfo(attribute)
   if (isLast) {
     append("\n")
@@ -313,6 +331,14 @@ fun StringBuilder.appendAttributeRequirementAndAvailability(attribute: Attribute
   }
 }
 
+fun StringBuilder.appendAttributeInternalNote(attribute: Attribute) {
+  val internalNote = attribute.getOwnOrParentInternalNote() ?: return
+  append("**Internal Use Only:** ".indentLines(2))
+  val noteWithoutLineBreaks = internalNote.replace('\n', ' ')
+  append(noteWithoutLineBreaks)
+  appendLine()
+}
+
 fun StringBuilder.appendAttributeDeprecationInfo(attribute: Attribute) {
   val deprecatedSince = attribute.deprecatedSince
   val deprecationNote = attribute.deprecationNote
@@ -337,7 +363,9 @@ fun StringBuilder.appendChildren(parent: Element, parentPath: String) {
   } else {
     val elements = if (parent.containsItself) (parent.children.unwrap() + parent) else parent.children.unwrap()
     if (elements.isEmpty()) return
-    val children = elements.filter { it.deprecatedSince == null }
+    val children = elements
+      .filter { it.deprecatedSince == null }
+      .filter { it.isIncluded() }
     val deprecatedChildren = elements.filter { it.deprecatedSince != null }
     appendLine("\nChildren")
     appendLine(":")
@@ -392,6 +420,7 @@ fun String.cleanup(): String {
   return this
     .cleanupElementLinks()
     .fixWildcardLinks()
+    .removeInternalLinks()
     .removeAttributeLinks()
     .removeDocProviderSpecificAttributes()
     .internalizeLinks()
@@ -406,6 +435,14 @@ fun String.fixWildcardLinks(): String {
   // reason: Writerside can't handle links with * and the error page is displayed
   // [wildcard](path__to__*) -> [wildcard](#path__to__-)
   return replace("__*", "__-")
+}
+
+fun String.removeInternalLinks(): String {
+  val internalLinkRegex = Regex("\\[([^]]*)]\\(([^ )]*)\\)\\{internal}")
+  return internalLinkRegex.replace(this) { matchResult ->
+    val text = matchResult.groupValues[1]
+    text
+  }
 }
 
 fun String.removeAttributeLinks(): String {
@@ -445,6 +482,10 @@ fun getInternalLink(url: String): String? {
   return null
 }
 
+fun DocumentationItem.isIncluded(): Boolean {
+  return this.shouldBeRenderedIn(RenderContext.SDK_DOCS)
+}
+
 class DescriptorInfo(val dataUrl: String, val filePath: String)
 
 // ============
@@ -454,10 +495,30 @@ data class DocumentationContent(
   var elements: List<ElementWrapper> = emptyList()
 )
 
-// allows for referencing attributes by anchors in YAML
+
+// allows for referencing elements by anchors in YAML
 data class ElementWrapper(
   var element: Element? = null
 )
+
+interface DocumentationItem {
+  val parent: DocumentationItem?
+  val renderContexts: List<RenderContext>
+  val internalNote: String?
+
+  fun shouldBeRenderedIn(context: RenderContext): Boolean {
+    generateSequence(this) { it.parent }.toList().reversed().forEach {
+      if (!it.renderContexts.contains(context)) {
+        return false
+      }
+    }
+    return true
+  }
+
+  fun getOwnOrParentInternalNote(): String? {
+    return internalNote ?: parent?.getOwnOrParentInternalNote()
+  }
+}
 
 data class Element(
   var name: String? = null,
@@ -468,6 +529,7 @@ data class Element(
   var deprecatedSince: String? = null,
   var deprecationNote: String? = null,
   var description: String? = null,
+  override var internalNote: String? = null,
   var sdkDocsSupportDetails: String? = null,
   var attributes: List<AttributeWrapper> = emptyList(),
   var containsItself: Boolean = false,
@@ -477,16 +539,32 @@ data class Element(
   var requirement: Requirement? = null,
   var defaultValue: String? = null,
   var examples: List<String> = emptyList(),
-) {
+  var path: List<String> = emptyList(),
+  override var parent: DocumentationItem? = null,
+  override var renderContexts: List<RenderContext> = RenderContext.values().toList(), // included in all by default
+) : DocumentationItem {
+
   fun isWildcard(): Boolean {
     return name == "*"
+  }
+
+  fun copy(): Element {
+    return this.copy(attributes = this.attributes.map { it.copy() })
+  }
+
+  override fun toString(): String {
+    return "Element(name=$name, path=$path)"
   }
 }
 
 // allows for referencing attributes by anchors in YAML
 data class AttributeWrapper(
   var attribute: Attribute? = null,
-)
+) {
+  fun copy(): AttributeWrapper {
+    return this.copy(attribute = this.attribute?.copy())
+  }
+}
 
 data class Attribute(
   var name: String? = null,
@@ -496,8 +574,12 @@ data class Attribute(
   var deprecationNote: String? = null,
   var requirement: Requirement? = null,
   var description: String? = null,
+  override var internalNote: String? = null,
   var defaultValue: String? = null,
-)
+  var path: List<String> = emptyList(),
+  override var parent: DocumentationItem? = null,
+  override var renderContexts: List<RenderContext> = RenderContext.values().toList(), // included in all by default
+) : DocumentationItem
 
 data class Requirement(
   var required: Required = Required.UNKNOWN,
@@ -509,4 +591,9 @@ enum class Required {
   NO,
   YES_FOR_PAID,
   UNKNOWN
+}
+
+enum class RenderContext {
+  SDK_DOCS,
+  DOC_PROVIDER
 }

@@ -1,4 +1,4 @@
-<!-- Copyright 2000-2024 JetBrains s.r.o. and other contributors. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. -->
+<!-- Copyright 2000-2025 JetBrains s.r.o. and other contributors. Use of this source code is governed by the Apache 2.0 license that can be found in the LICENSE file. -->
 
 # Incompatible Changes in IntelliJ Platform and Plugins API 2025.*
 
@@ -69,12 +69,27 @@ NOTE: Entries not starting with code quotes (`name`) can be added to document no
 
 <include from="snippets.md" element-id="gradlePluginVersion"/>
 
+## 2025.2
+
+### IntelliJ Platform 2025.2
+
 ## 2025.1
 
 ### IntelliJ Platform 2025.1
 
+Code scheduled with `SwingUtilities.invokeLater` and `SwingUtilities.invokeAndWait` does not hold the write-intent lock
+: Consider using an explicit wrapping with [`ReadAction.compute()`](%gh-ic%/platform/core-api/src/com/intellij/openapi/application/ReadAction.java) or [`WriteAction.run(ThrowableRunnable<E>)`](%gh-ic%/platform/core-api/src/com/intellij/openapi/application/WriteAction.java).
+
+Coroutines running under `Dispatchers.Main` do not hold the write-intent lock
+: To restore the old behavior, consider using `Dispatchers.EDT`.
 
 ### Kotlin Plugin 2025.1
 
 `org.jetbrains.kotlin.KtFakeSourceElement` class renamed to `org.jetbrains.kotlin.KtFakePsiSourceElement`
 : Update code usages.
+
+`org.jetbrains.kotlin.ir.linkage.IrDeserializer.IrLinkerExtension` class removed
+: This class was removed from the Kotlin compiler and is no longer available.
+
+`org.jetbrains.kotlin.ir.builders.TranslationPluginContext` class removed
+: This class was removed from the Kotlin compiler and is no longer available. 
